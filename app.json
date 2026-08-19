@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "MeditationApp",
+    "slug": "meditation-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "meditationapp",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.yourname.meditationapp"
+    },
+    "android": {
+      "package": "com.yourname.meditationapp"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
+        }
+      ]
+    ]
+  }
+}
