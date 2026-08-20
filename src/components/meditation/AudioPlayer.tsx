@@ -42,7 +42,7 @@ export function AudioPlayer({
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.accentPrimary} />
-        <Text style={styles.statusText}>Loading audio…</Text>
+        <Text style={styles.statusText}>正在加载音频……</Text>
       </View>
     );
   }

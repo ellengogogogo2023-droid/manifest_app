@@ -126,11 +126,11 @@ generateAudioRouter.post(
 
     // ── Input validation ─────────────────────────────────────
     if (!meditationId || typeof meditationId !== 'string') {
-      res.status(400).json({ error: 'meditationId is required' });
+      res.status(400).json({ error: '缺少冥想记录标识。' });
       return;
     }
     if (!scriptText || typeof scriptText !== 'string' || scriptText.trim().length === 0) {
-      res.status(400).json({ error: 'scriptText is required' });
+      res.status(400).json({ error: '请输入冥想文字。' });
       return;
     }
 
@@ -139,7 +139,7 @@ generateAudioRouter.post(
 
     if (!speechKey || !speechRegion) {
       res.status(500).json({
-        error: 'TTS not configured — add AZURE_SPEECH_KEY and AZURE_SPEECH_REGION to backend/.env',
+        error: '中文语音服务尚未配置，请稍后重试。',
       });
       return;
     }

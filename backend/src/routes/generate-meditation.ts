@@ -35,7 +35,7 @@ generateMeditationRouter.post(
   '/',
   async (req: Request, res: Response): Promise<void> => {
     if (!azureOpenAiDeployment) {
-      res.status(500).json({ error: 'AZURE_OPENAI_DEPLOYMENT is not configured' });
+      res.status(500).json({ error: '冥想文字服务尚未配置，请稍后重试。' });
       return;
     }
 
@@ -44,19 +44,19 @@ generateMeditationRouter.post(
 
     // ── Input validation ─────────────────────────────────────
     if (!goal || typeof goal !== 'string' || goal.trim().length === 0) {
-      res.status(400).json({ error: 'goal is required' });
+      res.status(400).json({ error: '请输入具体目标。' });
       return;
     }
     if (!scene || typeof scene !== 'string' || scene.trim().length === 0) {
-      res.status(400).json({ error: 'scene is required' });
+      res.status(400).json({ error: '请输入冥想时间、地点或场景。' });
       return;
     }
     if (!difficulty || typeof difficulty !== 'string' || difficulty.trim().length === 0) {
-      res.status(400).json({ error: 'difficulty is required' });
+      res.status(400).json({ error: '请输入当前困难或限制性信念。' });
       return;
     }
     if (!durationMinutes || ![3, 5, 10, 15].includes(Number(durationMinutes))) {
-      res.status(400).json({ error: 'durationMinutes must be 3, 5, 10, or 15' });
+      res.status(400).json({ error: '冥想时长必须为 3、5、10 或 15 分钟。' });
       return;
     }
 
@@ -81,7 +81,7 @@ generateMeditationRouter.post(
 
       const scriptText = completion.choices[0]?.message?.content?.trim();
       if (!scriptText) {
-        res.status(500).json({ error: 'Unexpected response format from Azure OpenAI' });
+        res.status(500).json({ error: '冥想文字服务返回了无效结果，请稍后重试。' });
         return;
       }
 

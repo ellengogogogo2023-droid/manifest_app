@@ -33,7 +33,7 @@ export async function generateMeditationScript(
 
   if (!response.ok) {
     const data = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error ?? `generate-meditation failed: ${response.status}`);
+    throw new Error(data.error ?? `冥想文字生成失败（${response.status}）。`);
   }
 
   return response.json() as Promise<GenerateMeditationResponse>;
@@ -50,7 +50,7 @@ export async function generateMeditationAudio(
 
   if (!response.ok) {
     const data = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error ?? `generate-audio failed: ${response.status}`);
+    throw new Error(data.error ?? `冥想音频生成失败（${response.status}）。`);
   }
 
   return response.json() as Promise<GenerateAudioResponse>;
