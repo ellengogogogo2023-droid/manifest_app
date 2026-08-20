@@ -18,18 +18,24 @@ export default function PlayerPage() {
     }
   }, [audioUrl, router]);
 
+  useEffect(() => {
+    if (player.isFinished) {
+      router.replace('/check-in');
+    }
+  }, [player.isFinished, router]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         {/* Back button */}
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>← 返回</Text>
         </TouchableOpacity>
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Your Meditation</Text>
-          <Text style={styles.subtitle}>Find a comfortable position and close your eyes.</Text>
+          <Text style={styles.title}>你的冥想</Text>
+          <Text style={styles.subtitle}>找一个舒服的姿势，闭上眼睛，跟随声音慢慢呼吸。</Text>
         </View>
 
         {/* Player */}
