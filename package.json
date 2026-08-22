@@ -4,8 +4,8 @@
   "main": "expo-router/entry",
   "scripts": {
     "dev": "concurrently --kill-others --names API,EXPO \"npm:backend:dev\" \"npm:start\"",
-    "start": "expo start",
-    "backend:dev": "npm --prefix backend run dev",
+    "start": "expo start --offline --port 8091",
+    "backend:dev": "cd backend && npm run dev",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",

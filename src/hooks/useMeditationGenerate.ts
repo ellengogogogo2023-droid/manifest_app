@@ -4,11 +4,11 @@ import {
   generateMeditationScript,
 } from '@/services/meditation.service';
 import { useMeditationStore } from '@/stores/meditationStore';
-import type { MeditationFormValues } from '@/types/meditation.types';
+import type { MeditationFormValues, MeditationScript } from '@/types/meditation.types';
 
 type ScriptResult = {
   meditationId: string;
-  scriptText: string;
+  script: MeditationScript;
 } | null;
 
 type AudioResult = {
@@ -23,7 +23,7 @@ export function useMeditationGenerate() {
   const setGeneratedScript = useMeditationStore((s) => s.setGeneratedScript);
   const setAudioUrl = useMeditationStore((s) => s.setAudioUrl);
   const meditationId = useMeditationStore((s) => s.meditationId);
-  const scriptText = useMeditationStore((s) => s.scriptText);
+  const script = useMeditationStore((s) => s.script);
 
   const generateScript = useCallback(
     async (formValues: MeditationFormValues): Promise<ScriptResult> => {
@@ -33,19 +33,20 @@ export function useMeditationGenerate() {
       try {
         // Step 1 — Generate meditation text only
         setProgress('正在为你创作冥想文字……');
-        const { meditationId, scriptText } = await generateMeditationScript({
+        const { meditationId, script } = await generateMeditationScript({
           goal: formValues.goal,
           scene: formValues.scene,
           difficulty: formValues.difficulty,
           durationMinutes: formValues.durationMinutes,
+          day: formValues.day,
         });
 
         // Persist generated script so review page can inspect before TTS
-        setGeneratedScript({ meditationId, scriptText, formValues });
+        setGeneratedScript({ meditationId, script, formValues });
 
         setIsLoading(false);
         setProgress('');
-        return { meditationId, scriptText };
+        return { meditationId, script };
       } catch (err) {
         const msg =
           err instanceof Error ? err.message : '生成失败，请稍后重试。';
@@ -59,7 +60,7 @@ export function useMeditationGenerate() {
   );
 
   const generateAudioForCurrent = useCallback(async (): Promise<AudioResult> => {
-    if (!meditationId || !scriptText) {
+    if (!meditationId || !script) {
       setError('没有找到冥想文字，请先完成生成。');
       return null;
     }
@@ -69,7 +70,11 @@ export function useMeditationGenerate() {
 
     try {
       setProgress('正在生成中文冥想音频……');
-      const { audioUrl } = await generateMeditationAudio({ meditationId, scriptText });
+      const { audioUrl } = await generateMeditationAudio({
+        meditationId,
+        script: script.script,
+        voice: 'female',
+      });
       setAudioUrl(audioUrl);
       setIsLoading(false);
       setProgress('');
@@ -81,7 +86,7 @@ export function useMeditationGenerate() {
       setError(msg);
       return null;
     }
-  }, [meditationId, scriptText, setAudioUrl]);
+  }, [meditationId, script, setAudioUrl]);
 
   return { generateScript, generateAudioForCurrent, isLoading, progress, error, setError };
 }

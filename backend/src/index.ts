@@ -1,26 +1,14 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import 'dotenv/config';
 import { generateMeditationRouter } from './routes/generate-meditation';
 import { generateAudioRouter } from './routes/generate-audio';
 
 const PORT = process.env['PORT'] ?? 3001;
 
-// ── Guard: fail fast on missing required keys ────────────────
-if (!process.env['AZURE_OPENAI_API_KEY']) {
-  console.error('[server] ✗ AZURE_OPENAI_API_KEY is not set in backend/.env');
-  process.exit(1);
-}
-if (!process.env['AZURE_OPENAI_ENDPOINT']) {
-  console.error('[server] ✗ AZURE_OPENAI_ENDPOINT is not set in backend/.env');
-  process.exit(1);
-}
-if (!process.env['AZURE_OPENAI_DEPLOYMENT']) {
-  console.error('[server] ✗ AZURE_OPENAI_DEPLOYMENT is not set in backend/.env');
-  process.exit(1);
-}
-// AZURE_SPEECH_KEY / REGION are optional at startup — the route returns a clear error if missing
+// DashScope credentials are validated inside routes so the API can still start
+// and return clear configuration errors to the app during local development.
 
 const app = express();
 
@@ -45,9 +33,8 @@ app.use('/api/generate-audio', generateAudioRouter);
 // ── Start ────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`[server] ✓ Backend running on http://localhost:${PORT}`);
-  console.log('[server] ✓ Azure OpenAI config: set');
-  const ttsReady = process.env['AZURE_SPEECH_KEY'] && process.env['AZURE_SPEECH_REGION'];
-  console.log(`[server] ${ttsReady ? '✓' : '✗'} Azure Speech (TTS): ${ttsReady ? 'set' : 'not set'}`);
+  const dashScopeReady = Boolean(process.env['DASHSCOPE_API_KEY']);
+  console.log(`[server] ${dashScopeReady ? '✓' : '✗'} DashScope config: ${dashScopeReady ? 'set' : 'not set'}`);
 });
 
 

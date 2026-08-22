@@ -4,115 +4,189 @@ import { Router, type Request, type Response } from 'express';
 
 // ── Types ────────────────────────────────────────────────────
 
-type GenerateAudioBody = {
-  meditationId: string;
-  scriptText: string;
+type MeditationScriptSegment = {
+  text: string;
+  pause_after_ms: number;
 };
 
-// ── Helpers ──────────────────────────────────────────────────
+type GenerateAudioBody = {
+  meditationId: string;
+  script: MeditationScriptSegment[];
+};
 
-/** Escape special XML characters so they're safe inside SSML */
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+// ── DashScope Qwen3-TTS configuration ──────────────────────
 
-/**
- * Build SSML for Azure TTS.
- * Voice: zh-CN-XiaoxiaoNeural — warm Mandarin female voice
- * Rate: -10% — slightly slower for meditative delivery
- */
-function buildSsml(text: string): string {
-  return `<speak version='1.0' xml:lang='zh-CN'>
-  <voice xml:lang='zh-CN' xml:gender='Female' name='zh-CN-XiaoxiaoNeural'>
-    <prosody rate='-10%'>${escapeXml(text)}</prosody>
-  </voice>
-</speak>`;
-}
+const DASHSCOPE_TTS_URL =
+  process.env['DASHSCOPE_TTS_URL'] ??
+  'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
+const TTS_MODEL = 'qwen3-tts-flash';
+const TTS_VOICES = {
+  female: 'Cherry',
+  male: 'Ethan',
+} as const;
+type TtsVoice = keyof typeof TTS_VOICES;
 
-/**
- * Split long scripts into chunks ≤ maxChars.
- * Splits on double-newlines first, then sentence boundaries.
- * Azure TTS handles large inputs but 2000-char chunks keep requests fast.
- */
-function splitIntoChunks(text: string, maxChars = 2000): string[] {
-  if (text.length <= maxChars) return [text];
+type DashScopeTtsResponse = {
+  output?: {
+    audio?: {
+      url?: string;
+    };
+  };
+  code?: string;
+  message?: string;
+};
 
-  const chunks: string[] = [];
-  const paragraphs = text.split(/\n{2,}/);
-  let current = '';
-
-  for (const para of paragraphs) {
-    const joined = current ? `${current}\n\n${para}` : para;
-    if (joined.length > maxChars) {
-      if (current) {
-        chunks.push(current.trim());
-        current = '';
-      }
-      if (para.length > maxChars) {
-        const sentences = para.split(/(?<=[.!?…])\s+/);
-        for (const sentence of sentences) {
-          if ((current ? `${current} ` : '').length + sentence.length > maxChars) {
-            if (current) chunks.push(current.trim());
-            current = sentence;
-          } else {
-            current += (current ? ' ' : '') + sentence;
-          }
-        }
-      } else {
-        current = para;
-      }
-    } else {
-      current = joined;
-    }
+function readWavPcm(buffer: Buffer): { audioFormat: number; channels: number; sampleRate: number; bitsPerSample: number; data: Buffer } {
+  if (buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WAVE') {
+    throw new Error('DashScope TTS returned an unsupported audio container');
   }
 
-  if (current.trim()) chunks.push(current.trim());
+  let offset = 12;
+  let audioFormat = 0;
+  let channels = 0;
+  let sampleRate = 0;
+  let bitsPerSample = 0;
+  let data: Buffer | null = null;
+
+  while (offset + 8 <= buffer.length) {
+    const chunkId = buffer.toString('ascii', offset, offset + 4);
+    const chunkSize = buffer.readUInt32LE(offset + 4);
+    const chunkStart = offset + 8;
+    const chunkEnd = chunkStart + chunkSize;
+    if (chunkEnd > buffer.length) throw new Error('DashScope TTS returned a truncated WAV file');
+
+    if (chunkId === 'fmt ') {
+      audioFormat = buffer.readUInt16LE(chunkStart);
+      channels = buffer.readUInt16LE(chunkStart + 2);
+      sampleRate = buffer.readUInt32LE(chunkStart + 4);
+      bitsPerSample = buffer.readUInt16LE(chunkStart + 14);
+    } else if (chunkId === 'data') {
+      data = buffer.subarray(chunkStart, chunkEnd);
+    }
+
+    offset = chunkEnd + (chunkSize % 2);
+  }
+
+  if (!data || !audioFormat || !channels || !sampleRate || !bitsPerSample) {
+    throw new Error('DashScope TTS returned an incomplete WAV file');
+  }
+  return { audioFormat, channels, sampleRate, bitsPerSample, data };
+}
+
+function createWavPcm(
+  format: Pick<ReturnType<typeof readWavPcm>, 'audioFormat' | 'channels' | 'sampleRate' | 'bitsPerSample'>,
+  data: Buffer,
+): Buffer {
+  const header = Buffer.alloc(44);
+  const byteRate = format.sampleRate * format.channels * (format.bitsPerSample / 8);
+  const blockAlign = format.channels * (format.bitsPerSample / 8);
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(format.audioFormat, 20);
+  header.writeUInt16LE(format.channels, 22);
+  header.writeUInt32LE(format.sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(format.bitsPerSample, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(data.length, 40);
+  return Buffer.concat([header, data]);
+}
+
+function mergeWavPcm(buffers: Buffer[]): Buffer {
+  const parsed = buffers.map(readWavPcm);
+  const first = parsed[0];
+  if (!first) throw new Error('DashScope TTS returned no audio segments');
+  if (parsed.some((item) =>
+    item.audioFormat !== first.audioFormat ||
+    item.channels !== first.channels ||
+    item.sampleRate !== first.sampleRate ||
+    item.bitsPerSample !== first.bitsPerSample
+  )) {
+    throw new Error('DashScope TTS returned incompatible WAV segments');
+  }
+  return createWavPcm(first, Buffer.concat(parsed.map((item) => item.data)));
+}
+
+/**
+ * Group script segments into chunks whose combined text length stays ≤ maxChars.
+ * Keeps segments (and their pauses) intact — never splits mid-sentence.
+ * Modest chunks keep requests fast and preserve pause boundaries.
+ */
+function splitIntoChunks(
+  segments: MeditationScriptSegment[],
+  maxChars = 600,
+): MeditationScriptSegment[][] {
+  const chunks: MeditationScriptSegment[][] = [];
+  let current: MeditationScriptSegment[] = [];
+  let currentLength = 0;
+
+  for (const segment of segments) {
+    const segmentLength = segment.text.length;
+    if (current.length > 0 && currentLength + segmentLength > maxChars) {
+      chunks.push(current);
+      current = [];
+      currentLength = 0;
+    }
+    current.push(segment);
+    currentLength += segmentLength;
+  }
+
+  if (current.length > 0) chunks.push(current);
   return chunks;
 }
 
-/**
- * Call Azure TTS REST API for one text chunk.
- * Returns raw MP3 buffer.
- * Per RULES.md: retries up to 2 times on 5xx / network errors (not 4xx).
- */
+function getVoice(value: unknown): TtsVoice {
+  return value === 'male' ? 'male' : 'female';
+}
+
+/** Call DashScope Qwen3-TTS and download its WAV result. */
 async function synthesizeChunk(
-  text: string,
-  region: string,
-  speechKey: string,
+  segments: MeditationScriptSegment[],
+  voice: TtsVoice,
+  apiKey: string,
   attempt = 0,
 ): Promise<Buffer> {
-  const url = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
-
-  const response = await fetch(url, {
+  const response = await fetch(DASHSCOPE_TTS_URL, {
     method: 'POST',
-    headers: {
-      'Ocp-Apim-Subscription-Key': speechKey,
-      'Content-Type': 'application/ssml+xml',
-      'X-Microsoft-OutputFormat': 'audio-16khz-128kbitrate-mono-mp3',
-      'User-Agent': 'MeditationApp/1.0',
-    },
-    body: buildSsml(text),
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: TTS_MODEL,
+      input: {
+        text: segments.map((segment) => segment.text).join(' '),
+        voice: TTS_VOICES[voice],
+        language_type: 'Chinese',
+      },
+    }),
     signal: AbortSignal.timeout(90_000), // 90 s per RULES.md
   });
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
     if (response.status < 500 && response.status !== 429) {
-      throw new Error(`Azure TTS error ${response.status}: ${errText}`);
+      throw new Error(`DashScope TTS error ${response.status}: ${errText}`);
     }
     if (attempt < 2) {
       await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
-      return synthesizeChunk(text, region, speechKey, attempt + 1);
+      return synthesizeChunk(segments, voice, apiKey, attempt + 1);
     }
-    throw new Error(`Azure TTS error ${response.status} after ${attempt} retries: ${errText}`);
+    throw new Error(`DashScope TTS error ${response.status} after ${attempt} retries: ${errText}`);
   }
 
-  return Buffer.from(await response.arrayBuffer());
+  const data = (await response.json()) as DashScopeTtsResponse;
+  const audioUrl = data.output?.audio?.url;
+  if (!audioUrl) {
+    throw new Error(data.message ?? 'DashScope TTS returned no audio URL');
+  }
+
+  const audioResponse = await fetch(audioUrl, { signal: AbortSignal.timeout(90_000) });
+  if (!audioResponse.ok) {
+    throw new Error(`DashScope TTS audio download failed: ${audioResponse.status}`);
+  }
+  return Buffer.from(await audioResponse.arrayBuffer());
 }
 
 // ── Route ────────────────────────────────────────────────────
@@ -122,46 +196,56 @@ export const generateAudioRouter = Router();
 generateAudioRouter.post(
   '/',
   async (req: Request, res: Response): Promise<void> => {
-    const { meditationId, scriptText } = req.body as GenerateAudioBody;
+    const { meditationId, script } = req.body as GenerateAudioBody;
 
     // ── Input validation ─────────────────────────────────────
     if (!meditationId || typeof meditationId !== 'string') {
       res.status(400).json({ error: '缺少冥想记录标识。' });
       return;
     }
-    if (!scriptText || typeof scriptText !== 'string' || scriptText.trim().length === 0) {
+    const segments = Array.isArray(script) ? script : [];
+    const isValidScript =
+      segments.length > 0 &&
+      segments.every(
+        (s) =>
+          s &&
+          typeof s.text === 'string' &&
+          s.text.trim().length > 0 &&
+          typeof s.pause_after_ms === 'number',
+      );
+    if (!isValidScript) {
       res.status(400).json({ error: '请输入冥想文字。' });
       return;
     }
 
-    const speechKey = process.env['AZURE_SPEECH_KEY'];
-    const speechRegion = process.env['AZURE_SPEECH_REGION'];
+    const dashScopeApiKey = process.env['DASHSCOPE_API_KEY'];
+    const voice = getVoice((req.body as { voice?: unknown }).voice);
 
-    if (!speechKey || !speechRegion) {
+    if (!dashScopeApiKey) {
       res.status(500).json({
-        error: '中文语音服务尚未配置，请稍后重试。',
+        error: '中文语音服务尚未配置：请在 backend/.env 中设置 DASHSCOPE_API_KEY。',
       });
       return;
     }
 
     try {
       // ── Synthesize (sequential to avoid rate limits) ──────
-      const chunks = splitIntoChunks(scriptText.trim());
+      const chunks = splitIntoChunks(segments);
       console.log(`[generate-audio] ${chunks.length} chunk(s) for ${meditationId}`);
 
       const buffers: Buffer[] = [];
       for (const [i, chunk] of chunks.entries()) {
-        console.log(`[generate-audio] chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
-        buffers.push(await synthesizeChunk(chunk, speechRegion, speechKey));
+        console.log(`[generate-audio] chunk ${i + 1}/${chunks.length} (${chunk.length} segments)`);
+        buffers.push(await synthesizeChunk(chunk, voice, dashScopeApiKey));
       }
 
-      // Binary MP3 concat — works for same-bitrate files (MVP quality)
-      const audioBuffer = Buffer.concat(buffers);
+      // DashScope returns WAV files; merge PCM payloads before rebuilding one valid WAV.
+      const audioBuffer = mergeWavPcm(buffers);
 
       // ── Save to uploads/ ──────────────────────────────────
       const uploadsDir = path.join(process.cwd(), 'uploads');
       await fs.mkdir(uploadsDir, { recursive: true });
-      const filename = `${meditationId}.mp3`;
+      const filename = `${meditationId}.wav`;
       await fs.writeFile(path.join(uploadsDir, filename), audioBuffer);
 
       // ── Build URL from incoming request host ──────────────

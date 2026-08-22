@@ -91,12 +91,12 @@ const response = await fetch('/api/generate'); // response.json() 返回 any，�
 ### MVP 阶段 — 🔴 绝对禁止
 
 1. **禁止在前端代码中硬编码任何 API 密钥**
-   - Azure OpenAI Key、Azure Speech Key 等只能存在于 Supabase Edge Functions 的 Secrets 中
+  - DashScope API Key 只能存在于后端环境变量或部署平台 Secrets 中
    - 前端代码中不得出现任何密钥字符串
 
-2. **禁止从前端直接调用 Azure OpenAI 或 TTS API**
-   - 所有对 Azure API 的调用必须通过 Supabase Edge Functions 中转
-   - 前端只能调用自己的 Supabase Edge Function 端点
+2. **禁止从前端直接调用 DashScope 模型或 TTS API**
+  - 所有对 DashScope API 的调用必须通过 Node.js 后端中转
+  - 前端只能调用自己的后端 API 端点
 
 3. **禁止将 `.env.local` 提交到 Git**
    - `.env.local` 必须在 `.gitignore` 中
@@ -122,13 +122,13 @@ const response = await fetch('/api/generate'); // response.json() 返回 any，�
 
 ### 错误重试策略
 
-- **Edge Function 调用 Azure API 时**：对网络错误和 5xx 服务端错误，最多自动重试 **2 次**，每次间隔 **1 秒**；对 4xx 客户端错误（参数错误、认证失败）**不重试**，直接返回明确错误信息
-- **前端调用 Edge Function 时**：不做自动重试，由用户手动点击重试；错误信息需对用户友好（如 "Generation failed, please try again" 而非原始报错）
+- **后端调用 DashScope API 时**：对网络错误和 5xx 服务端错误，最多自动重试 **2 次**，每次间隔 **1 秒**；对 4xx 客户端错误（参数错误、认证失败）**不重试**，直接返回明确错误信息
+- **前端调用后端 API 时**：不做自动重试，由用户手动点击重试；错误信息需对用户友好
 
 ### 超时处理
 
-- Edge Function 内调用 Azure OpenAI 时设置显式超时：**120 秒**（避免 Supabase Edge Function 默认超时截断）
-- Edge Function 内调用 Azure TTS 时设置显式超时：**90 秒**
+- 后端调用 DashScope 文本生成时设置显式超时：**120 秒**
+- 后端调用 DashScope TTS 和音频下载时设置显式超时：**90 秒**
 - 超时时返回明确错误码（建议 HTTP 504），前端展示 "Generation timed out, please try again"
 
 ### 状态管理边界
@@ -195,7 +195,7 @@ feat(iap): implement premium unlock flow for iOS
 
 ### 安全检查
 - [ ] 没有硬编码的 API 密钥或敏感字符串
-- [ ] 没有直接从前端调用 Azure OpenAI / Azure TTS API
+- [ ] 没有直接从前端调用 DashScope 文本生成 / Qwen3-TTS API
 - [ ] Phase 2：付费功能的访问控制在服务端有对应保护
 
 ### 代码质量

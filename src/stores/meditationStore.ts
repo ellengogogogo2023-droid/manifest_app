@@ -1,11 +1,11 @@
 import { create } from 'zustand';
-import type { MeditationFormValues } from '@/types/meditation.types';
+import type { MeditationFormValues, MeditationScript } from '@/types/meditation.types';
 
 // Current meditation data — shared between IndexPage (set after generation)
 // and PlayerPage (read for playback). Per RULES.md: cross-page data goes in store.
 type MeditationState = {
   meditationId: string | null;
-  scriptText: string | null;
+  script: MeditationScript | null;
   audioUrl: string | null;
   draftFormValues: MeditationFormValues | null;
 };
@@ -13,12 +13,12 @@ type MeditationState = {
 type MeditationActions = {
   setCurrentMeditation: (data: {
     meditationId: string;
-    scriptText: string;
+    script: MeditationScript;
     audioUrl: string;
   }) => void;
   setGeneratedScript: (data: {
     meditationId: string;
-    scriptText: string;
+    script: MeditationScript;
     formValues: MeditationFormValues;
   }) => void;
   setAudioUrl: (audioUrl: string) => void;
@@ -27,18 +27,18 @@ type MeditationActions = {
 
 export const useMeditationStore = create<MeditationState & MeditationActions>((set) => ({
   meditationId: null,
-  scriptText: null,
+  script: null,
   audioUrl: null,
   draftFormValues: null,
-  setCurrentMeditation: ({ meditationId, scriptText, audioUrl }) =>
-    set({ meditationId, scriptText, audioUrl }),
-  setGeneratedScript: ({ meditationId, scriptText, formValues }) =>
-    set({ meditationId, scriptText, draftFormValues: formValues, audioUrl: null }),
+  setCurrentMeditation: ({ meditationId, script, audioUrl }) =>
+    set({ meditationId, script, audioUrl }),
+  setGeneratedScript: ({ meditationId, script, formValues }) =>
+    set({ meditationId, script, draftFormValues: formValues, audioUrl: null }),
   setAudioUrl: (audioUrl: string) => set({ audioUrl }),
   clearCurrentMeditation: () =>
     set({
       meditationId: null,
-      scriptText: null,
+      script: null,
       audioUrl: null,
       draftFormValues: null,
     }),

@@ -5,7 +5,7 @@
 ## MVP 阶段目录结构
 
 > 核心价值验证版本：无认证、无付费、无历史库。
-> 技术栈：Expo + Supabase Edge Functions + Azure OpenAI + Azure TTS
+> 技术栈：Expo + Node.js/Express 后端 + 阿里云 DashScope（Qwen 文本生成与 Qwen3-TTS）
 
 ```
 meditation-app/
@@ -29,8 +29,7 @@ meditation-app/
 │   │   └── useAudioPlayer.ts           # 音频播放状态管理（expo-av）
 │   │
 │   ├── services/
-│   │   ├── supabase.ts                 # Supabase 客户端初始化
-│   │   └── meditation.service.ts       # 调用 Edge Functions 的封装
+│   │   └── meditation.service.ts       # 调用 Node.js 后端 API 的封装
 │   │
 │   ├── stores/
 │   │   └── meditationStore.ts          # 当前冥想数据（跨页面传递）
@@ -40,7 +39,7 @@ meditation-app/
 │   │   └── api.types.ts                # Edge Function 请求/响应类型
 │   │
 │   ├── constants/
-│   │   ├── config.ts                   # 读取环境变量（Supabase URL 等）
+│   │   ├── config.ts                   # 读取后端 API 地址等配置
 │   │   └── theme.ts                    # 配色、字体、间距
 │   │
 │   └── utils/
@@ -49,16 +48,10 @@ meditation-app/
 │   └── utils/
 │       └── formatDuration.ts           # 格式化音频时长（mm:ss）
 │
-├── supabase/
-│   ├── functions/
-│   │   ├── generate-meditation/
-│   │   │   ├── index.ts                # 调用 Azure OpenAI 生成冥想文本
-│   │   │   └── prompt.ts              # 冥想生成 Prompt 模板
-│   │   └── generate-audio/
-│   │       └── index.ts               # 调用 Azure TTS 生成音频并存 Storage
-│   ├── migrations/
-│   │   └── 001_initial_schema.sql     # meditations 表
-│   └── config.toml
+├── backend/
+│   ├── src/routes/generate-meditation.ts # 通过 DashScope 生成冥想文本
+│   ├── src/routes/generate-audio.ts      # 通过 Qwen3-TTS 生成 WAV 音频
+│   └── uploads/                          # MVP 本地音频文件
 │
 ├── assets/
 │   ├── images/
@@ -80,9 +73,9 @@ meditation-app/
 | `app/player.tsx` | 接收生成结果，播放音频 |
 | `src/hooks/useMeditationGenerate.ts` | 串联文本生成 + 音频生成两步，暴露 isLoading / progress / error 状态 |
 | `src/hooks/useAudioPlayer.ts` | 封装 expo-av，暴露 play / pause / seekTo / positionMs 等播放状态 |
-| `src/services/meditation.service.ts` | 所有网络请求唯一出口，前端不直接调用 Azure API |
+| `src/services/meditation.service.ts` | 所有网络请求唯一出口，前端不直接调用 DashScope API |
 | `src/stores/meditationStore.ts` | 跨页面共享当前冥想数据（audioUrl、scriptText 等） |
-| `supabase/functions/` | **后端逻辑核心**：Azure API 密钥只在此处，前端无法访问 |
+| `backend/src/routes/` | **后端逻辑核心**：DashScope API Key 只在后端环境变量中，前端无法访问 |
 
 ### MVP 数据库表
 

@@ -51,6 +51,7 @@ export function GoalInputForm({ onSubmit, isLoading = false }: GoalInputFormProp
   const [scene, setScene] = useState<MeditationScene>('');
   const [difficulty, setDifficulty] = useState('');
   const [duration, setDuration] = useState<MeditationDuration>(10);
+  const [day, setDay] = useState(1);
   // 是否已点击过提交（用于决定何时展示错误提示）
   const [submitted, setSubmitted] = useState(false);
 
@@ -67,6 +68,7 @@ export function GoalInputForm({ onSubmit, isLoading = false }: GoalInputFormProp
       scene: scene.trim(),
       difficulty: difficulty.trim(),
       durationMinutes: duration,
+      day,
     });
   }
 
@@ -190,6 +192,28 @@ export function GoalInputForm({ onSubmit, isLoading = false }: GoalInputFormProp
               </TouchableOpacity>
             ))}
           </View>
+        </View>
+
+        {/* ── Day ──────────────────────────────────────────── */}
+        <View style={styles.field}>
+          <Text style={styles.label}>第几天（21 天计划）</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="1-21"
+            placeholderTextColor={colors.textMuted}
+            value={String(day)}
+            onChangeText={(text) => {
+              if (!text) {
+                setDay(1);
+                return;
+              }
+              const parsed = Number(text.replace(/[^0-9]/g, ''));
+              if (Number.isFinite(parsed)) {
+                setDay(Math.min(21, Math.max(1, parsed)));
+              }
+            }}
+            keyboardType="number-pad"
+          />
         </View>
 
         {/* ── Submit ───────────────────────────────────────── */}

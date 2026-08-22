@@ -73,7 +73,7 @@
 - [x] 目标
   - 提供一个可调用的 API（本地 Node 服务或 Serverless 均可）
   - 接收 goal/scene/feeling/durationMinutes
-  - 调用 Claude API，基于既定 Prompt 返回结构化冥想文本
+  - 调用 LLM API，基于既定 Prompt 返回结构化冥想文本
 - 涉及文件（建议）
   - backend/src/routes/generate-meditation.ts
   - backend/src/prompts/meditationPrompt.ts

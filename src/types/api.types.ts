@@ -1,3 +1,5 @@
+import type { MeditationScript } from './meditation.types';
+
 // ── Generate Meditation ───────────────────────────────────────
 // POST /api/generate-meditation
 
@@ -6,11 +8,13 @@ export type GenerateMeditationRequest = {
   scene: string;
   difficulty: string;
   durationMinutes: number;
+  /** 21 天冥想计划中的第几天（1–21） */
+  day: number;
 };
 
 export type GenerateMeditationResponse = {
   meditationId: string;
-  scriptText: string;
+  script: MeditationScript;
 };
 
 // ── Generate Audio (P1-05) ────────────────────────────────────
@@ -18,7 +22,8 @@ export type GenerateMeditationResponse = {
 
 export type GenerateAudioRequest = {
   meditationId: string;
-  scriptText: string;
+  script: MeditationScript['script'];
+  voice?: 'female' | 'male';
 };
 
 export type GenerateAudioResponse = {

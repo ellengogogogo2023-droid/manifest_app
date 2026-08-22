@@ -64,7 +64,7 @@
 
 **注意事项：**
 - MVP 不需要后台播放，Phase 2 如需锁屏控件则配置 `Audio.setAudioModeAsync`
-- iOS 后台播放需在 `app.json` 配置 `UIBackgroundModes: ["audio"]`
+- iOS 后台播放需在 `app.json` 配置 `UIBackgroundModes: ["audio"]`   
 ---
 
 #### AsyncStorage（本机数据持久化）
@@ -117,59 +117,65 @@
 
 ### 二、后端
 
-#### Supabase
+#### Node.js + Express 后端
 | 项目 | 值 |
 |---|---|
-| **版本** | Supabase JS Client `^2.45.0` |
-| **MVP 使用的服务** | PostgreSQL · Edge Functions · Storage |
-| **MVP 暂不使用** | Auth（无登录）· RLS（匿名写入） |
+| **运行时** | Node.js ≥ 20 LTS |
+| **框架** | Express 4.x |
+| **MVP 存储** | 本地 `uploads/` 目录，仅用于生成音频文件 |
 
 **选择理由：**
-- **Edge Functions**：Deno 运行时，可安全存储并调用 Azure API 密钥，无需独立部署后端服务器
-- **Storage**：存储 TTS 生成的音频文件（`.mp3`），前端直接播放公开 URL
-- **免费额度**：免费层足够 MVP 阶段使用（500MB DB、1GB Storage、2M Edge Function 调用/月）
+- **Node.js 后端**：当前项目通过后端路由统一代理模型调用，前端不接触第三方 API 密钥
+- **Storage**：当前 MVP 将生成的 TTS 音频保存到后端本地 `uploads/` 目录，前端播放后端返回的 URL
+- **DashScope**：文本生成和语音合成共用一个平台 API Key，减少密钥和服务配置数量
 
 **注意事项：**
-- Edge Functions 基于 Deno，使用 `Deno.env.get()` 读取 Secrets（不是 `process.env`）
-- 免费项目超过 1 周不活跃会被暂停，生产环境需升级 Pro（$25/月）
-- MVP Storage bucket 设为公开读取；引入用户体系后改为签名 URL
+- DashScope API Key 只允许存在后端环境变量 `DASHSCOPE_API_KEY` 中，不得进入前端或提交到 Git
+- 当前 MVP 后端使用 `process.env` 读取本地环境变量；正式部署时应使用部署平台的 Secret 配置
+- 音频存储仍是本地文件方案，后续发布阶段再评估对象存储
 
 ---
 
-#### Azure OpenAI
+#### 阿里云 DashScope OpenAI 兼容模式（文本生成）
 | 项目 | 值 |
 |---|---|
-| **推荐模型** | `gpt-4o-mini`（成本低，适合 MVP） |
-| **备选模型** | `gpt-4o`（输出质量更高） |
-| **调用方式** | REST API（在 Supabase Edge Function 中直接调用） |
+| **推荐模型** | `qwen-turbo` |
+| **可配置模型** | `DASHSCOPE_TEXT_MODEL`，可切换 Qwen 或 DeepSeek 系列 |
+| **调用方式** | OpenAI Node SDK + DashScope `compatible-mode/v1` |
+| **认证变量** | `DASHSCOPE_API_KEY` |
+| **Base URL** | 按 API Key 所属地域配置 `DASHSCOPE_BASE_URL` |
 
 **选择理由：**
-- 如果已有 Azure 订阅，可统一在 Azure Portal 管理密钥
-- `gpt-4o-mini` 在长文本生成上表现良好，每次冥想生成成本极低（≈$0.0001）
+- DashScope 提供 OpenAI 兼容接口，现有 `openai` SDK 的调用结构可以保留
+- `qwen-turbo` 优先用于中文冥想文本；模型名通过环境变量配置，便于后续对比 DeepSeek
+- 现有 system prompt、user prompt、`temperature`、`max_tokens` 和非流式响应结构可以保留
 
 **注意事项：**
-- 需要单独申请 Deployment，配置 `AZURE_OPENAI_ENDPOINT`、`AZURE_OPENAI_KEY`、`AZURE_OPENAI_DEPLOYMENT` 三个 Secrets
-- 所有 Secrets 只存在 Supabase Edge Function 环境变量中
-- 设置 `max_tokens` 上限（建议 2000）防止超长输出产生异常费用
+- API Key 必须与 Base URL 所在地域一致，否则会出现认证失败
+- 北京、新加坡等地域优先使用官方推荐的 workspace-specific endpoint；具体 URL 需根据控制台返回的 API Host 配置
+- 需要在 Model Studio 开通并授权所选模型，设置 `max_tokens` 上限防止超长输出
 
 ---
 
-#### Azure Cognitive Services Speech（TTS）
+#### 阿里云 DashScope Qwen3-TTS（语音合成）
 | 项目 | 值 |
 |---|---|
-| **固定音色** | `en-US-JennyNeural`（平静，适合冥想） |
-| **音频格式** | MP3（`audio-16khz-128kbitrate-mono-mp3`） |
-| **调用方式** | REST API（在 Supabase Edge Function 中调用） |
+| **模型** | `qwen3-tts-flash` |
+| **接口** | DashScope MultiModalConversation 等效 HTTP 接口 |
+| **认证变量** | `DASHSCOPE_API_KEY` |
+| **音色配置** | 女声 `Cherry`；男声 `Ethan` |
+| **音频格式** | 官方非实时接口返回 WAV URL；后端下载并合并为 WAV |
 
 **选择理由：**
-- 与 Azure OpenAI 在同一生态，密钥管理统一，无需额外注册第三方账号
-- `JennyNeural` 音色语调自然温和，冥想场景适配性良好
-- 免费额度：500,000 字符/月（远超测试需求）
+- 与文本生成共用 DashScope 平台和 API Key
+- `qwen3-tts-flash` 满足当前中文语音合成需求，后续可评估 `qwen3-tts-instruct-flash` 的自然语言语气控制
+- 后端继续负责分段、音频保存和 URL 返回，前端播放接口保持不变
 
 **注意事项：**
-- 需要 `AZURE_SPEECH_KEY` 和 `AZURE_SPEECH_REGION` 两个 Secrets
-- 单次冥想音频生成约需 3-8 秒，前端需显示生成进度状态
-- 生成的音频存入 Supabase Storage，不要每次播放都重新调用 TTS（节省费用）
+- DashScope TTS 不直接复用 SSML；当前迁移版本会保留脚本文本分段，但不把 `pause_after_ms` 作为 SSML 控制发送，精确停顿需要后续增加 PCM 静音合并
+- 官方非实时接口返回的音频 URL 有效期约 24 小时；后端立即下载到本地文件，避免播放时依赖临时 URL
+- 返回 WAV/PCM 数据时，后端合并各段 WAV 的 PCM payload 并重建一个合法 WAV 文件，当前不需要额外转码工具
+- 长文本可能需要分段调用；应保留现有错误处理和重试策略，并避免把原始音频响应内容写入日志
 
 ---
 
@@ -201,8 +207,8 @@
 | 服务 | 免费额度 | 超出费用 |
 |---|---|---|
 | Supabase | 免费层够用（≤500 活跃用户） | Pro $25/月 |
-| Azure OpenAI gpt-4o-mini | 按量计费 | ≈$0.0001/次冥想生成 |
-| Azure Speech TTS | 500K 字符/月免费 | $4/100万字符 |
+| DashScope Qwen 文本生成 | 按量计费 | 以 Model Studio 当前价格为准 |
+| DashScope Qwen3-TTS | 按量计费 | 以 Model Studio 当前价格为准 |
 | EAS Build | 30 次/月免费 | $99/月无限制 |
 
 ---
@@ -261,6 +267,6 @@
 
 | 服务 | 音质 | 价格 | 阶段 |
 |---|---|---|---|
-| Azure Speech `JennyNeural` | ⭐⭐⭐⭐ | $4/100万字符 | MVP（默认） |
-| OpenAI TTS `onyx` | ⭐⭐⭐⭐ | $15/100万字符 | MVP 备选 |
+| DashScope Qwen3-TTS `qwen3-tts-flash` | 待实测 | 以 Model Studio 当前价格为准 | P3（当前） |
+| DashScope Qwen3-TTS `qwen3-tts-instruct-flash` | 待实测 | 以 Model Studio 当前价格为准 | 后续评估 |
 | ElevenLabs `Rachel` | ⭐⭐⭐⭐⭐ | $30/100万字符 | Phase 2 升级 |

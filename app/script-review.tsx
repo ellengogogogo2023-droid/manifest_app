@@ -14,41 +14,22 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { useMeditationGenerate } from '@/hooks/useMeditationGenerate';
 import { useMeditationStore } from '@/stores/meditationStore';
 import { colors, radius, spacing, typography } from '@/theme';
-import type { MeditationFormValues } from '@/types/meditation.types';
+import type { MeditationFormValues, MeditationScript } from '@/types/meditation.types';
 
-function renderScriptWithMarkers(script: string) {
-  const lines = script.split(/\r?\n/);
-
-  return lines.map((line, index) => {
-    const trimmed = line.trim();
-
-    if (/^\[\d+:\d{2}\s*-\s*\d+:\d{2}\]/.test(trimmed)) {
-      return (
-        <Text key={`line-${index}`} style={styles.sectionMarker}>
-          {trimmed}
-        </Text>
-      );
-    }
-
-    if (/^\[PAUSE:\d+s\]$/.test(trimmed)) {
-      return (
-        <Text key={`line-${index}`} style={styles.pauseMarker}>
-          {trimmed}
-        </Text>
-      );
-    }
-
-    return (
-      <Text key={`line-${index}`} style={styles.scriptLine}>
-        {line.length === 0 ? ' ' : line}
+function renderScriptWithMarkers(script: MeditationScript) {
+  return script.script.map((segment, index) => (
+    <View key={`segment-${index}`}>
+      <Text style={styles.scriptLine}>{segment.text}</Text>
+      <Text style={styles.pauseMarker}>
+        {`（停顿 ${(segment.pause_after_ms / 1000).toFixed(1)} 秒）`}
       </Text>
-    );
-  });
+    </View>
+  ));
 }
 
 export default function ScriptReviewPage() {
   const router = useRouter();
-  const scriptText = useMeditationStore((s) => s.scriptText);
+  const script = useMeditationStore((s) => s.script);
   const draftFormValues = useMeditationStore((s) => s.draftFormValues);
   const { generateScript, generateAudioForCurrent, isLoading, progress, error, setError } =
     useMeditationGenerate();
@@ -57,12 +38,12 @@ export default function ScriptReviewPage() {
   const [sceneDraft, setSceneDraft] = useState<string>(draftFormValues?.scene ?? '');
   const [difficultyDraft, setDifficultyDraft] = useState(draftFormValues?.difficulty ?? '');
 
-  const canConfirm = !!scriptText && !isLoading;
+  const canConfirm = !!script && !isLoading;
 
   const scriptContent = useMemo(() => {
-    if (!scriptText) return null;
-    return renderScriptWithMarkers(scriptText);
-  }, [scriptText]);
+    if (!script) return null;
+    return renderScriptWithMarkers(script);
+  }, [script]);
 
   async function handleRegenerate() {
     if (!draftFormValues) {
@@ -100,7 +81,7 @@ export default function ScriptReviewPage() {
     }
   }
 
-  if (!scriptText || !draftFormValues) {
+  if (!script || !draftFormValues) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyState}>
@@ -172,7 +153,8 @@ export default function ScriptReviewPage() {
         </View>
 
         <View style={styles.scriptCard}>
-          <Text style={styles.cardTitle}>生成的冥想文字</Text>
+          <Text style={styles.cardTitle}>{script.title}</Text>
+          <Text style={styles.fieldLabel}>{script.intention}</Text>
           <View style={styles.scriptBody}>{scriptContent}</View>
         </View>
       </ScrollView>
